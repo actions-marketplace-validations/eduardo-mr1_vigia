@@ -397,6 +397,102 @@ function findAsyncExpect(expression: ts.Expression, playwright: boolean): string
   return ts.isIdentifier(current) && current.text === 'expect' ? modifier : null;
 }
 
+/**
+ * An assertion inside a `catch` block never runs if the code doesn't throw.
+ *
+ * If `riskyOperation()` succeeds or fails silently, the `catch` block is
+ * skipped entirely, and the test completes green without verifying anything.
+ *
+ * Safe alternatives:
+ * - `await expect(promise).rejects.toThrow()`
+ * - Put `expect.unreachable()`, `fail()`, or `throw` inside the `try` block
+ * - Declare `expect.assertions(...)` / `expect.hasAssertions()`
+ */
+export const assertionInCatch: Rule = (context) => {
+  const findings: Finding[] = [];
+
+  walk(context.source, (node) => {
+    if (!isTestCall(node)) return;
+    const body = bodyOf(node);
+    if (!body) return;
+
+    if (hasAssertionPlan(body)) return;
+
+    walk(body, (inner) => {
+      if (!ts.isTryStatement(inner)) return;
+      if (!inner.catchClause) return;
+
+      if (!containsAssertion(inner.catchClause.block)) return;
+      if (hasFailureGuard(inner.tryBlock)) return;
+
+      findings.push(
+        finding(
+          context,
+          inner.catchClause,
+          'assertion-in-catch',
+          'P1',
+          'Assertion inside a catch block without guaranteed failure in try block.',
+          'If the code under test does not throw, the catch block is skipped and the test passes silently. Use await expect(promise).rejects.toThrow() instead, or add expect.unreachable() in the try block.',
+        ),
+      );
+    });
+  });
+
+  return findings;
+};
+
+function hasAssertionPlan(testBody: ts.Node): boolean {
+  let found = false;
+  walk(testBody, (node) => {
+    if (found || !ts.isCallExpression(node)) return;
+    if (ts.isPropertyAccessExpression(node.expression)) {
+      const prop = node.expression.name.text;
+      const target = node.expression.expression;
+      if (ts.isIdentifier(target) && target.text === 'expect') {
+        if (prop === 'assertions' || prop === 'hasAssertions') {
+          found = true;
+        }
+      }
+    }
+  });
+  return found;
+}
+
+function hasFailureGuard(tryBlock: ts.Block): boolean {
+  let found = false;
+  walk(tryBlock, (node) => {
+    if (found) return;
+
+    if (ts.isThrowStatement(node)) {
+      found = true;
+      return;
+    }
+
+    if (ts.isCallExpression(node)) {
+      const expr = node.expression;
+      if (ts.isIdentifier(expr) && expr.text === 'fail') {
+        found = true;
+        return;
+      }
+      if (ts.isPropertyAccessExpression(expr)) {
+        const prop = expr.name.text;
+        const target = expr.expression;
+        if (ts.isIdentifier(target)) {
+          if (target.text === 'expect' && (prop === 'unreachable' || prop === 'fail')) {
+            found = true;
+            return;
+          }
+          if (target.text === 'assert' && prop === 'fail') {
+            found = true;
+            return;
+          }
+        }
+      }
+    }
+  });
+  return found;
+}
+
 export const rules: readonly Rule[] = [
   noAssertion,
   expectWithoutMatcher,
@@ -404,4 +500,5 @@ export const rules: readonly Rule[] = [
   skippedTest,
   focusedTest,
   missingAwait,
+  assertionInCatch,
 ];

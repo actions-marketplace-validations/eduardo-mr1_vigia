@@ -39,7 +39,7 @@ Real output from `node dist/cli.js ejemplo` against the fixture in this repo —
 
 ## What it detects
 
-Seven checks, all built on the same idea: a test that can't fail is worse than no test, because it occupies the place of one that would.
+Eight checks, all built on the same idea: a test that can't fail is worse than no test, because it occupies the place of one that would.
 
 | Rule | Severity | Example |
 |---|---|---|
@@ -47,11 +47,12 @@ Seven checks, all built on the same idea: a test that can't fail is worse than n
 | **`expect()` without a matcher** | P1 | `expect(result)` with no `.toBe(...)` chained after it |
 | **Tautology** | P1 | `expect(true).toBe(true)`, comparing a literal to itself |
 | **Missing `await`** | P1 | `expect(promise).rejects.toThrow()` with no `await` — the test ends before the promise settles |
+| **Assertion in `catch`** | P1 | `try { await op(); } catch (e) { expect(e)... }` without a failure guard in `try` — passes silently if `op()` never throws |
 | **Focused test (`.only`)** | P1 | `it.only(...)` silently skips the rest of the suite in CI |
 | **Skipped test** | P3 | `it.skip` / `xit` left behind past its reason for existing |
 | **Orphan negative assertion** | P1 / P2 | `queryByTestId('x')` expected to be null/absent, but `"x"` never appears anywhere in the source — the assertion can't fail because the thing it denies doesn't exist |
 
-The first six run on any Jest-style test file, with native support for Cypress (`.should()`, `.and()`), Chai (`assert.*`) and Playwright's async locator matchers (`toBeVisible`, `toHaveText`, etc. — every Playwright assertion is a promise, so a missing `await` is invisible on the page but silent in the suite). The seventh needs `--src` pointed at your source root, and also reads Maestro YAML flows for the same defect in E2E specs.
+The first seven run on any Jest-style test file, with native support for Cypress (`.should()`, `.and()`), Chai (`assert.*`) and Playwright's async locator matchers (`toBeVisible`, `toHaveText`, etc. — every Playwright assertion is a promise, so a missing `await` is invisible on the page but silent in the suite). The eighth needs `--src` pointed at your source root, and also reads Maestro YAML flows for the same defect in E2E specs.
 
 ---
 

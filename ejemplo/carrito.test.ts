@@ -30,6 +30,15 @@ describe('cart', () => {
     // No await: the promise resolves after the test has already ended.
     expect(findCoupon('MISSING')).rejects.toThrow();
   });
+
+  it('rejects an invalid payment method', async () => {
+    // Assertion in catch without fail: passes silently if charge() never throws.
+    try {
+      await charge('INVALID');
+    } catch (err) {
+      expect(err).toBeDefined();
+    }
+  });
 });
 
 declare function sum(values: number[]): number;
@@ -37,3 +46,4 @@ declare function applyDiscount(amount: number, pct: number): number;
 declare function validateCoupon(code: string): boolean;
 declare function withTax(amount: number): number;
 declare function findCoupon(code: string): Promise<unknown>;
+declare function charge(method: string): Promise<void>;
