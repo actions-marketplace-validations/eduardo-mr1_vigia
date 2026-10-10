@@ -1,5 +1,6 @@
 import { analyzeSource } from './analyze';
 import {
+  assertionInCatch,
   expectWithoutMatcher,
   focusedTest,
   missingAwait,
@@ -381,3 +382,148 @@ describe('noAssertion with other assertion forms', () => {
     ).toHaveLength(1);
   });
 });
+
+describe('assertionInCatch', () => {
+  it('detects an assertion inside catch without guard in try block', () => {
+    const result = findings(
+      `it('fails on invalid input', async () => {
+         try {
+           await doSomething();
+         } catch (err) {
+           expect(err).toBeDefined();
+         }
+       });`,
+      [assertionInCatch],
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.rule).toBe('assertion-in-catch');
+    expect(result[0]?.severity).toBe('P1');
+    expect(result[0]?.hint).toContain('await expect(promise).rejects.toThrow()');
+  });
+
+  it('accepts try block protected with expect.unreachable()', () => {
+    expect(
+      findings(
+        `it('fails on invalid input', async () => {
+           try {
+             await doSomething();
+             expect.unreachable();
+           } catch (err) {
+             expect(err).toBeDefined();
+           }
+         });`,
+        [assertionInCatch],
+      ),
+    ).toEqual([]);
+  });
+
+  it('accepts try block protected with fail() or expect.fail()', () => {
+    expect(
+      findings(
+        `it('fails on invalid input', async () => {
+           try {
+             await doSomething();
+             fail('should have thrown');
+           } catch (err) {
+             expect(err).toBeDefined();
+           }
+         });`,
+        [assertionInCatch],
+      ),
+    ).toEqual([]);
+
+    expect(
+      findings(
+        `it('fails on invalid input', async () => {
+           try {
+             await doSomething();
+             expect.fail();
+           } catch (err) {
+             expect(err).toBeDefined();
+           }
+         });`,
+        [assertionInCatch],
+      ),
+    ).toEqual([]);
+  });
+
+  it('accepts try block protected with throw', () => {
+    expect(
+      findings(
+        `it('fails on invalid input', async () => {
+           try {
+             await doSomething();
+             throw new Error('should fail');
+           } catch (err) {
+             expect(err).toBeDefined();
+           }
+         });`,
+        [assertionInCatch],
+      ),
+    ).toEqual([]);
+  });
+
+  it('accepts tests declaring expect.assertions(...) or expect.hasAssertions()', () => {
+    expect(
+      findings(
+        `it('fails on invalid input', async () => {
+           expect.assertions(1);
+           try {
+             await doSomething();
+           } catch (err) {
+             expect(err).toBeDefined();
+           }
+         });`,
+        [assertionInCatch],
+      ),
+    ).toEqual([]);
+
+    expect(
+      findings(
+        `it('fails on invalid input', async () => {
+           expect.hasAssertions();
+           try {
+             await doSomething();
+           } catch (err) {
+             expect(err).toBeDefined();
+           }
+         });`,
+        [assertionInCatch],
+      ),
+    ).toEqual([]);
+  });
+
+  it('accepts try/catch when catch has no assertions', () => {
+    expect(
+      findings(
+        `it('handles cleanup', async () => {
+           try {
+             await cleanup();
+           } catch (err) {
+             console.error(err);
+           }
+           expect(1).toBe(1);
+         });`,
+        [assertionInCatch],
+      ),
+    ).toEqual([]);
+  });
+
+  it('detects Chai assert inside catch', () => {
+    const result = findings(
+      `it('fails on invalid input', async () => {
+         try {
+           await doSomething();
+         } catch (err) {
+           assert.isNotNull(err);
+         }
+       });`,
+      [assertionInCatch],
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.rule).toBe('assertion-in-catch');
+  });
+});
+
